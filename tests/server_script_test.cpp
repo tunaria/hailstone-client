@@ -153,7 +153,7 @@ end
 local function send(c, p) T.handlers[Event.unhandled_opcode]({ self = c, packet = p }) end
 
 function list_request(c, first)
-  local p = Packet(0x1426, 12)
+  local p = Packet(0x1434, 12)
   p:WriteInt32(0, 0x4c465348); p:WriteInt16(4, 1); p:WriteInt16(6, 1); p:WriteInt32(8, first or 0)
   send(c, p)
   return c.sent[#c.sent]
@@ -161,7 +161,7 @@ end
 
 function chunk_request(c, id, index, offset)
   local before = #c.sent
-  local p = Packet(0x1426, 24)
+  local p = Packet(0x1434, 24)
   p:WriteInt32(0, 0x4c465348); p:WriteInt16(4, 1); p:WriteInt16(6, 2)
   p:WriteInt32(8, id); p:WriteInt32(12, index); p:WriteInt32(16, offset); p:WriteInt32(20, 32768)
   send(c, p)
@@ -176,7 +176,7 @@ end
 
 function guild_hello(c)
   local before = #c.sent
-  local p = Packet(0x1422, 80)
+  local p = Packet(0x1430, 80)
   p:WriteInt32(0, 0x47534d4e); p:WriteInt16(4, 1); p:WriteInt16(6, 0)
   send(c, p)
   return #c.sent > before
@@ -184,7 +184,7 @@ end
 
 function settings_request(c)
   local before = #c.sent
-  local p = Packet(0x1424, 6)
+  local p = Packet(0x1432, 6)
   p:WriteInt32(0, 0x50534d4e); p:WriteInt16(4, 1)
   send(c, p)
   return #c.sent > before

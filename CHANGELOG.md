@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- For server admins: Hailstone's own packets moved to opcodes 0x1430-0x1435 (guild invitation 0x1430/0x1431, settings 0x1432/0x1433, server files 0x1434/0x1435), away from Project Triune's custom opcodes, which now use 0x1422. Update `server/quests/global/encounters/hailstone.lua` on the server together with the client
+
 ## 0.6.0-beta (2026-11-07)
 
 - Lost Dungeons of Norrath merchants (and the other adventure and alternate currency merchants) now let you inspect their goods: right-click one to see its details, as with any other item (Y in the gamepad UI). Shift or Ctrl+right-click shows it in the item preview

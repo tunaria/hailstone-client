@@ -312,8 +312,7 @@ std::optional<ServerProfile> profile_from_eqhost(std::string_view text) {
         return s;
     };
     while (!text.empty()) {
-        const std::size_t end = text.find('
-');
+        const std::size_t end = text.find('\n');
         std::string_view line = trim(text.substr(0, end));
         text = end == std::string_view::npos ? std::string_view() : text.substr(end + 1);
         const std::size_t eq = line.find('=');

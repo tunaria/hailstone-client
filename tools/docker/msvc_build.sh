@@ -11,5 +11,9 @@ wineserver -p 2>/dev/null || true
 wine wineboot >/dev/null 2>&1 || true
 if [ ! -f "$build/CMakeCache.txt" ]; then
     CC=cl CXX=cl cmake -S "$src" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Windows "$@"
+elif [ $# -gt 0 ]; then
+    # An existing build folder still takes the options given now (a -D added later, such as
+    # HAILSTONE_ALLOW_IN_EQ_FOLDER, was ignored before); generator and system name stay as configured.
+    cmake -B "$build" "$@"
 fi
 cmake --build "$build" -j "${JOBS:-20}"

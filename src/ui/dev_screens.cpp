@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <fstream>
+#include <iterator>
 #include <charconv>
 #include <cmath>
 #include <ctime>
@@ -1271,7 +1273,8 @@ ServerProfile profile_from_view(const LoginView& view) {
     return p;
 }
 
-bool load_login_settings(LoginView& view, Config& config, const std::filesystem::path& servers) {
+bool load_login_settings(LoginView& view, Config& config, const std::filesystem::path& servers,
+                         const std::filesystem::path& eqhost) {
     view.servers_dir = servers;
     view.profiles = list_profiles(servers);
     view.default_ui = config.get_string("ui.name", "modern");
@@ -1290,6 +1293,18 @@ bool load_login_settings(LoginView& view, Config& config, const std::filesystem:
             config.set("login.profile", p.id);
             changed = true;
             view.profiles = list_profiles(servers);
+        }
+    }
+    if (view.profiles.empty() && !eqhost.empty()) {
+        std::ifstream in(eqhost, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (auto p = profile_from_eqhost(text)) {
+            p->id = make_profile_id(p->name, servers);
+            if (save_profile(*p, servers)) {
+                config.set("login.profile", p->id);
+                changed = true;
+                view.profiles = list_profiles(servers);
+            }
         }
     }
     int index = view.profiles.empty() ? -1 : 0;

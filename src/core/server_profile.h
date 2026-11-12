@@ -104,6 +104,10 @@ std::optional<ServerProfile> load_profile(std::string_view id,
 // Writes servers/<id>/server.ini (keeping keys it does not know) and creates the assets/ folder. An empty id is an
 // error (false); use make_profile_id() for a new profile first.
 bool save_profile(const ServerProfile& profile, const std::filesystem::path& servers = platform::servers_dir());
+// The login server an EverQuest install's eqhost.txt names ("[LoginServer]" then "Host=name:port", the first Host
+// line; a missing port is 5998, RoF2's), as a new profile named after the host, with no id yet. Nullopt when the
+// text names none. A server's patcher ships this file, so it is the first server's default.
+std::optional<ServerProfile> profile_from_eqhost(std::string_view text);
 // Takes the whole servers/<id>/ folder, with its assets, maps and characters' files, out of the list: it is renamed
 // to servers/.deleted/<id>-<date>-<time>/ in one step, so it can be brought back by hand and a file held open never
 // leaves half a profile. False when it fails (nothing changed then).

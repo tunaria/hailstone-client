@@ -367,7 +367,9 @@ public:
         // login.host/port/username keys become the first.
         // The saved passwords (the system keyring); test logins never read or write them.
         if (opts_.auto_user.empty()) login_view_.credentials = &platform::system_credentials();
-        if (ui::load_login_settings(login_view_, config_)) config_.save(config_path_);
+        // A fresh install with no saved server starts on the one the asset folder's eqhost.txt names.
+        const std::filesystem::path eqhost = game_.find_base("eqhost.txt").value_or(std::filesystem::path());
+        if (ui::load_login_settings(login_view_, config_, platform::servers_dir(), eqhost)) config_.save(config_path_);
         bool named_server = !opts_.server.empty() && ui::select_profile_named(login_view_, opts_.server);
         if (!opts_.server.empty() && !named_server)
             log::warn("--server {}: no saved server has this id or name", opts_.server);

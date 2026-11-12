@@ -305,4 +305,38 @@ std::string client_window_title(std::string_view server, std::string_view charac
     return title;
 }
 
+std::optional<ServerProfile> profile_from_eqhost(std::string_view text) {
+    auto trim = [](std::string_view s) {
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
+        while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
+        return s;
+    };
+    while (!text.empty()) {
+        const std::size_t end = text.find('
+');
+        std::string_view line = trim(text.substr(0, end));
+        text = end == std::string_view::npos ? std::string_view() : text.substr(end + 1);
+        const std::size_t eq = line.find('=');
+        if (eq == std::string_view::npos) continue;
+        std::string key(trim(line.substr(0, eq)));
+        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (key != "host") continue;
+        std::string_view value = trim(line.substr(eq + 1));
+        ServerProfile p;
+        p.port = 5998;
+        if (const std::size_t colon = value.rfind(':'); colon != std::string_view::npos) {
+            const int port = std::atoi(std::string(value.substr(colon + 1)).c_str());
+            if (port < 1 || port > 65535) continue;
+            p.port = port;
+            value = trim(value.substr(0, colon));
+        }
+        if (value.empty()) continue;
+        p.host = std::string(value);
+        p.name = p.host;
+        return p;
+    }
+    return std::nullopt;
+}
+
+
 } // namespace hailstone

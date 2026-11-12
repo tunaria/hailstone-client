@@ -11,6 +11,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "core/server_profile.h"
 #include "core/config.h"
 #include "game/eq_names.h"
 #include "platform/open_folder.h"
@@ -125,6 +126,50 @@ TEST_CASE("Login profiles: saved and picked again, never the password") {
     CHECK_FALSE(std::filesystem::exists(servers.path / "my-server"));
     REQUIRE(out.profiles.size() == 1);
     CHECK(ui::selected_profile_id(out) == "play-example-org");
+}
+
+TEST_CASE("Login profiles: a fresh install starts on the server its eqhost.txt names") {
+    using namespace hailstone;
+    // The parser: the first Host line, its port (RoF2's 5998 when missing); nothing usable is nullopt.
+    auto p = profile_from_eqhost("[LoginServer]
+Host=login.example.org:5999
+Host=other:1
+");
+    REQUIRE(p);
+    CHECK(p->host == "login.example.org");
+    CHECK(p->port == 5999);
+    CHECK(p->name == "login.example.org");
+    CHECK(p->id.empty());
+    auto bare = profile_from_eqhost("[LoginServer]
+host = 10.1.2.3 
+");
+    REQUIRE(bare);
+    CHECK(bare->host == "10.1.2.3");
+    CHECK(bare->port == 5998);
+    CHECK_FALSE(profile_from_eqhost("[LoginServer]
+"));
+    CHECK_FALSE(profile_from_eqhost("Host=:5999
+Host=x:99999
+"));
+
+    TempServers servers;
+    const std::filesystem::path eqhost = servers.path / "eqhost.txt";
+    std::ofstream(eqhost) << "[LoginServer]
+Host=login.example.org:5999
+";
+    // No saved server: the eqhost.txt one is made, picked and named in login.profile.
+    Config cfg;
+    ui::LoginView view;
+    CHECK(ui::load_login_settings(view, cfg, servers.path, eqhost));
+    REQUIRE(view.profiles.size() == 1);
+    CHECK(view.selected == 0);
+    CHECK(view.host == "login.example.org");
+    CHECK(view.port == 5999);
+    CHECK(cfg.get_string("login.profile") == view.profiles[0].id);
+    // Loaded again (or once the player saved their own server): nothing more is added.
+    ui::LoginView again;
+    CHECK_FALSE(ui::load_login_settings(again, cfg, servers.path, eqhost));
+    CHECK(again.profiles.size() == 1);
 }
 
 TEST_CASE("Login profiles: each server keeps its own user interface") {

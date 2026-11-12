@@ -35,6 +35,13 @@ install_tree() { # <platform> <build dir> <service>
     dc run --rm --no-deps "$3" cmake --install "$2" --prefix "$out/$1/hailstone"
     # The default Windows install also writes zlib's bin/, include/ and lib/ (docs/updater.md step 2).
     rm -rf "$out/$1/hailstone/bin" "$out/$1/hailstone/include" "$out/$1/hailstone/lib"
+    # A server plugin built in (PLUGIN_NAME) has no install rule of its own (plugins reach players as add-ons):
+    # copy its folder from the build tree, so a build made for one server carries its plugin.
+    if [ -n "${PLUGIN_NAME:-}" ] && [ -d "$2/hailstone/plugins/$PLUGIN_NAME" ]; then
+        mkdir -p "$out/$1/hailstone/plugins"
+        cp -a "$2/hailstone/plugins/$PLUGIN_NAME" "$out/$1/hailstone/plugins/"
+        echo "with plugin $PLUGIN_NAME"
+    fi
     echo "installed $out/$1/hailstone"
 }
 

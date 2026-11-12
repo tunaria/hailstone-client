@@ -23,10 +23,35 @@ std::string folder_key(const std::filesystem::path& p) {
 }
 } // namespace
 
+// The override, then assets.path (resolve_asset_folder without `beside`).
+static AssetFolderResolution resolve_saved_asset_folder(const std::filesystem::path& override_dir, const Config& config,
+                                                        const AssetFolderValidator& check,
+                                                        const std::filesystem::path& data_folder);
+
 AssetFolderResolution resolve_asset_folder(const std::filesystem::path& override_dir, const Config& config,
                                            const AssetFolderValidator& validate,
-                                           const std::filesystem::path& data_folder) {
+                                           const std::filesystem::path& data_folder,
+                                           const std::filesystem::path& beside) {
     auto check = [&](const std::filesystem::path& p) { return validate ? validate(p) : validate_asset_folder(p); };
+    AssetFolderResolution out = resolve_saved_asset_folder(override_dir, config, check, data_folder);
+    // Nothing saved works (a first start, or a moved folder): the installation Hailstone sits in, when it is one.
+    if (out.source == AssetFolderSource::Picker && !beside.empty() && !asset_folder_pick_requested(config) &&
+        (override_dir.empty() || out.reason.empty())) {
+        std::error_code ec;
+        if (std::filesystem::is_directory(beside, ec) && check(beside).ok &&
+            (data_folder.empty() || data_folder_conflict(beside, data_folder, true).empty())) {
+            out.source = AssetFolderSource::Found;
+            out.path = beside;
+            out.reason.clear();
+            out.check = {};
+        }
+    }
+    return out;
+}
+
+static AssetFolderResolution resolve_saved_asset_folder(const std::filesystem::path& override_dir, const Config& config,
+                                                        const AssetFolderValidator& check,
+                                                        const std::filesystem::path& data_folder) {
     AssetFolderResolution out;
     std::filesystem::path saved = config.get_string("assets.path", "");
     if (!override_dir.empty()) {

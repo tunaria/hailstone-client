@@ -11,6 +11,7 @@
 
 #include "core/asset_folder_choice.h"
 #include "core/log.h"
+#include "platform/open_folder_dialog.h"
 #include "platform/window.h"
 #include "render/vk_context.h"
 #include "ui/imgui_layer.h"
@@ -72,7 +73,7 @@ void FolderDialog::open(SDL_Window* window, const std::string& start) {
         s.open = false;
         s.result = std::move(r);
     };
-    SDL_ShowOpenFolderDialog(callback, keep, window, start.empty() ? nullptr : start.c_str(), false);
+    platform::show_open_folder_dialog(callback, keep, window, start.empty() ? nullptr : start.c_str());
 }
 
 bool FolderDialog::is_open() const {

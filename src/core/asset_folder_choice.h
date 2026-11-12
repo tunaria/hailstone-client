@@ -25,6 +25,7 @@ inline constexpr std::size_t kMaxRecentAssetFolders = 8;
 enum class AssetFolderSource {
     Override, // --game-dir or EQ_GAME_DIR
     Config,   // hailstone.ini assets.path
+    Found,    // the EverQuest folder Hailstone's own folder sits in (`beside`), when nothing saved works; not saved
     Picker,   // nothing usable: the picker asks
 };
 
@@ -44,10 +45,14 @@ using AssetFolderValidator = std::function<AssetFolderCheck(const std::filesyste
 // The order: the override (`override_dir`, from --game-dir or EQ_GAME_DIR) when it is a folder at all, as the player
 // asked for it (what the check finds missing is only logged); then assets.path when it passes the check, no
 // assets.pick is set and it does not hold `data_folder` (data_folder_conflict; an empty one is not checked); else
+// `beside` (when not empty) next: the folder that holds Hailstone's own folder, used when it passes the check and
+// does not hold `data_folder` by data_folder_conflict's rule. It is only a default, never saved, so a moved
+// installation is found again; the caller passes it only in a HAILSTONE_ALLOW_IN_EQ_FOLDER build. Else
 // the picker. An override that is no folder goes to the picker, saying so.
 AssetFolderResolution resolve_asset_folder(const std::filesystem::path& override_dir, const Config& config,
                                            const AssetFolderValidator& validate = {},
-                                           const std::filesystem::path& data_folder = {});
+                                           const std::filesystem::path& data_folder = {},
+                                           const std::filesystem::path& beside = {});
 
 // True in a build made with the CMake option HAILSTONE_ALLOW_IN_EQ_FOLDER (off by default): Hailstone's folder may
 // then be a subfolder of the EverQuest folder (data_folder_conflict).

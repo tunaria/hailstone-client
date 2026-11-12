@@ -140,6 +140,47 @@ TEST_CASE("Asset folder: the recent folders") {
     CHECK(config.get_string("assets.path") == (fs::current_path() / "RoF2").string());
 }
 
+TEST_CASE("Asset folder: the EverQuest folder Hailstone sits in is the default when nothing saved works") {
+    TempDir tmp("beside");
+    const fs::path eq = tmp.path / "EverQuest";
+    const fs::path hs = eq / "hailstone";
+    fs::create_directories(hs);
+    Config config;
+    // A first start: found, and not saved.
+    auto r = resolve_asset_folder({}, config, only(eq), hs, eq);
+    CHECK(r.source == AssetFolderSource::Found);
+    CHECK(same_folder(r.path, eq));
+    CHECK(r.reason.empty());
+    CHECK(config.get_string("assets.path", "").empty());
+    // Not an installation: the picker, as before.
+    CHECK(resolve_asset_folder({}, config, only(tmp.path / "other"), hs, eq).source == AssetFolderSource::Picker);
+    // No `beside` (a build without HAILSTONE_ALLOW_IN_EQ_FOLDER): the picker.
+    CHECK(resolve_asset_folder({}, config, only(eq), hs).source == AssetFolderSource::Picker);
+    // Hailstone's folder is the EverQuest folder itself: refused even as a default.
+    CHECK(resolve_asset_folder({}, config, only(eq), eq, eq).source == AssetFolderSource::Picker);
+    // A saved folder that works wins; one that is gone falls back to the found one.
+    const fs::path other = tmp.path / "RoF2";
+    fs::create_directories(other);
+    config.set("assets.path", other.string());
+    auto both = [&](const fs::path& p) {
+        AssetFolderCheck c;
+        c.is_directory = true;
+        c.ok = same_folder(p, eq) || same_folder(p, other);
+        return c;
+    };
+    CHECK(resolve_asset_folder({}, config, both, hs, eq).source == AssetFolderSource::Config);
+    config.set("assets.path", (tmp.path / "moved").string());
+    CHECK(resolve_asset_folder({}, config, both, hs, eq).source == AssetFolderSource::Found);
+    // "Change asset folder" asked for the picker: it shows.
+    request_asset_folder_pick(config, true);
+    CHECK(resolve_asset_folder({}, config, both, hs, eq).source == AssetFolderSource::Picker);
+    request_asset_folder_pick(config, false);
+    // An override that is no folder is not replaced by the found one: the picker says why.
+    auto bad = resolve_asset_folder(tmp.path / "nope", config, both, hs, eq);
+    CHECK(bad.source == AssetFolderSource::Picker);
+    CHECK_FALSE(bad.reason.empty());
+}
+
 TEST_CASE("Asset folder: never one Hailstone writes into") {
     TempDir tmp("conflict");
     const fs::path eq = tmp.path / "RoF2";

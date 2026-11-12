@@ -1,6 +1,6 @@
 #pragma once
 
-// The system's folder picker (SDL_ShowOpenFolderDialog: the portal or GTK on Linux, the shell's dialog on Windows).
+// The system's folder picker (show_open_folder_dialog: the portal or GTK on Linux, the shell's file dialog on Windows).
 // It answers later, possibly on another thread: poll() gives the folder once, after the player chose one.
 
 #include <filesystem>

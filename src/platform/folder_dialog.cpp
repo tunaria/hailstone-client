@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL_dialog.h>
 
+#include "platform/open_folder_dialog.h"
 #include "platform/window.h"
 
 namespace hailstone::platform {
@@ -39,8 +40,8 @@ void FolderDialog::open(Window& window, const std::filesystem::path& start) {
         auto u8 = start.u8string();
         shared_->start.assign(u8.begin(), u8.end());
     }
-    SDL_ShowOpenFolderDialog(&answered, new std::shared_ptr<Shared>(shared_), window.sdl_window(),
-                             shared_->start.empty() ? nullptr : shared_->start.c_str(), false);
+    show_open_folder_dialog(&answered, new std::shared_ptr<Shared>(shared_), window.sdl_window(),
+                            shared_->start.empty() ? nullptr : shared_->start.c_str());
 }
 
 bool FolderDialog::is_open() const {

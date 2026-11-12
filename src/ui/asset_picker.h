@@ -20,8 +20,8 @@ namespace hailstone::ui {
 
 class ImGuiLayer;
 
-// The system's folder dialog (SDL_ShowOpenFolderDialog). It answers asynchronously, possibly on another thread;
-// take() hands the answer to the UI thread.
+// The system's folder dialog (platform::show_open_folder_dialog). It answers asynchronously, possibly on another
+// thread; take() hands the answer to the UI thread.
 class FolderDialog {
 public:
     FolderDialog();

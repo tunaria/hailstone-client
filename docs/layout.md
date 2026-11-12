@@ -103,6 +103,8 @@ The asset picker refuses an asset folder that holds the Hailstone folder (`data_
 reason. A build made with the CMake option `HAILSTONE_ALLOW_IN_EQ_FOLDER=ON` accepts a Hailstone folder in a
 subfolder of the asset folder (`<EverQuest>/hailstone/`, where a server's own patcher may install it): writing there
 changes none of the install's files. The asset folder itself is refused either way. The option is off by default.
+Such a build also starts on the folder that holds the Hailstone folder (`../`) when it is an EverQuest install and
+no saved folder works (a first start, or a moved install); that default is never saved.
 
 The one exception is a macOS app bundle (`.app/Contents/`): replacing the app would delete the data and writing there
 breaks its signature, so a bundle keeps its data in `~/Library/Application Support/hailstone`. A dev build's

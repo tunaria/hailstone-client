@@ -349,6 +349,7 @@ add_library(hailstone_engine STATIC
   src/platform/mouse_capture.cpp
   src/platform/open_folder.cpp
   src/platform/folder_dialog.cpp
+  src/platform/open_folder_dialog.cpp
   src/platform/http_get.cpp
   src/platform/credentials.cpp
   src/platform/child_processes.cpp
@@ -672,7 +673,7 @@ set_property(SOURCE src/app/updater.cpp APPEND PROPERTY COMPILE_DEFINITIONS
              HAILSTONE_ADDON_INDEX="${HAILSTONE_ADDON_INDEX}" HAILSTONE_PROJECT_PAGE="${HAILSTONE_PROJECT_PAGE}")
 target_link_libraries(hailstone_engine PUBLIC SDL3::SDL3 Vulkan::Headers volk::volk_headers GPUOpen::VulkanMemoryAllocator glm::glm ZLIB::ZLIB)
 if(WIN32)
-  target_link_libraries(hailstone_engine PUBLIC ws2_32 advapi32 dbghelp winhttp)
+  target_link_libraries(hailstone_engine PUBLIC ws2_32 advapi32 dbghelp winhttp ole32 shell32)
 elseif(APPLE)
   target_link_libraries(hailstone_engine PUBLIC "-framework Security" "-framework CoreFoundation")
 else()

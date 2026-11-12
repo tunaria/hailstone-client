@@ -144,10 +144,12 @@ TEST_CASE("Asset folder: never one Hailstone writes into") {
     TempDir tmp("conflict");
     const fs::path eq = tmp.path / "RoF2";
     fs::create_directories(eq / "hailstone");
-    // The data folder is the asset folder, or inside it: refused, saying why.
+    // The data folder is the asset folder itself: refused, saying why.
     CHECK_FALSE(data_folder_conflict(eq, eq).empty());
-    CHECK_FALSE(data_folder_conflict(eq, eq / "hailstone").empty());
-    CHECK_FALSE(data_folder_conflict(eq / "", eq / "hailstone" / ".").empty());
+    CHECK_FALSE(data_folder_conflict(eq / "", eq / ".").empty());
+    // A subfolder of its own inside the installation (a patcher's <EverQuest>/hailstone/): fine.
+    CHECK(data_folder_conflict(eq, eq / "hailstone").empty());
+    CHECK(data_folder_conflict(eq / "", eq / "hailstone" / ".").empty());
     // Apart, or the asset folder inside the data folder (Hailstone never writes there): fine.
     CHECK(data_folder_conflict(eq, tmp.path / "hailstone").empty());
     CHECK(data_folder_conflict(eq / "hailstone", eq).empty());
@@ -157,9 +159,10 @@ TEST_CASE("Asset folder: never one Hailstone writes into") {
     // A saved assets.path that holds the data folder goes to the picker, saying why.
     Config config;
     config.set("assets.path", eq.string());
-    auto r = resolve_asset_folder({}, config, only(eq), eq / "hailstone");
+    auto r = resolve_asset_folder({}, config, only(eq), eq);
     CHECK(r.source == AssetFolderSource::Picker);
-    CHECK(r.reason.find("inside this folder") != std::string::npos);
+    CHECK(r.reason.find("this same folder") != std::string::npos);
+    CHECK(resolve_asset_folder({}, config, only(eq), eq / "hailstone").source == AssetFolderSource::Config);
     CHECK(resolve_asset_folder({}, config, only(eq), tmp.path / "data").source == AssetFolderSource::Config);
 }
 

@@ -144,25 +144,34 @@ TEST_CASE("Asset folder: never one Hailstone writes into") {
     TempDir tmp("conflict");
     const fs::path eq = tmp.path / "RoF2";
     fs::create_directories(eq / "hailstone");
-    // The data folder is the asset folder itself: refused, saying why.
-    CHECK_FALSE(data_folder_conflict(eq, eq).empty());
-    CHECK_FALSE(data_folder_conflict(eq / "", eq / ".").empty());
-    // A subfolder of its own inside the installation (a patcher's <EverQuest>/hailstone/): fine.
-    CHECK(data_folder_conflict(eq, eq / "hailstone").empty());
-    CHECK(data_folder_conflict(eq / "", eq / "hailstone" / ".").empty());
-    // Apart, or the asset folder inside the data folder (Hailstone never writes there): fine.
-    CHECK(data_folder_conflict(eq, tmp.path / "hailstone").empty());
-    CHECK(data_folder_conflict(eq / "hailstone", eq).empty());
-    CHECK(data_folder_conflict(tmp.path / "RoF", tmp.path / "RoF2").empty());
-    CHECK(data_folder_conflict(eq, {}).empty());
+    for (bool allow : {false, true}) {
+        CAPTURE(allow);
+        // The data folder is the asset folder itself: refused, saying why, whatever the build.
+        CHECK_FALSE(data_folder_conflict(eq, eq, allow).empty());
+        CHECK_FALSE(data_folder_conflict(eq / "", eq / ".", allow).empty());
+        // Inside it: refused, unless the build allows a subfolder of Hailstone's own (HAILSTONE_ALLOW_IN_EQ_FOLDER).
+        CHECK(data_folder_conflict(eq, eq / "hailstone", allow).empty() == allow);
+        CHECK(data_folder_conflict(eq / "", eq / "hailstone" / ".", allow).empty() == allow);
+        // Apart, or the asset folder inside the data folder (Hailstone never writes there): fine.
+        CHECK(data_folder_conflict(eq, tmp.path / "hailstone", allow).empty());
+        CHECK(data_folder_conflict(eq / "hailstone", eq, allow).empty());
+        CHECK(data_folder_conflict(tmp.path / "RoF", tmp.path / "RoF2", allow).empty());
+        CHECK(data_folder_conflict(eq, {}, allow).empty());
+    }
 
-    // A saved assets.path that holds the data folder goes to the picker, saying why.
+    // A saved assets.path that holds the data folder goes to the picker, saying why (this build's rule).
     Config config;
     config.set("assets.path", eq.string());
     auto r = resolve_asset_folder({}, config, only(eq), eq);
     CHECK(r.source == AssetFolderSource::Picker);
     CHECK(r.reason.find("this same folder") != std::string::npos);
-    CHECK(resolve_asset_folder({}, config, only(eq), eq / "hailstone").source == AssetFolderSource::Config);
+    auto nested = resolve_asset_folder({}, config, only(eq), eq / "hailstone");
+    if (data_folder_subfolder_allowed()) {
+        CHECK(nested.source == AssetFolderSource::Config);
+    } else {
+        CHECK(nested.source == AssetFolderSource::Picker);
+        CHECK(nested.reason.find("inside this folder") != std::string::npos);
+    }
     CHECK(resolve_asset_folder({}, config, only(eq), tmp.path / "data").source == AssetFolderSource::Config);
 }
 

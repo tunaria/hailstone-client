@@ -99,6 +99,11 @@ the player owns (`data_dir_problem()`), rather than writing anywhere else:
 - the folder is a game install (it holds `eqgame.exe`, `spells_us.txt` or `eqclient.ini`): Hailstone unpacked into the
   RoF2 install would otherwise write into the asset folder, which it only reads.
 
+The asset picker refuses an asset folder that holds the Hailstone folder (`data_folder_conflict`), for the same
+reason. A build made with the CMake option `HAILSTONE_ALLOW_IN_EQ_FOLDER=ON` accepts a Hailstone folder in a
+subfolder of the asset folder (`<EverQuest>/hailstone/`, where a server's own patcher may install it): writing there
+changes none of the install's files. The asset folder itself is refused either way. The option is off by default.
+
 The one exception is a macOS app bundle (`.app/Contents/`): replacing the app would delete the data and writing there
 breaks its signature, so a bundle keeps its data in `~/Library/Application Support/hailstone`. A dev build's
 `build/hailstone/` is portable like any other copy, so deleting the build folder deletes its servers and settings; set

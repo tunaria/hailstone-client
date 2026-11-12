@@ -62,7 +62,16 @@ AssetFolderResolution resolve_asset_folder(const std::filesystem::path& override
     return out;
 }
 
-std::string data_folder_conflict(const std::filesystem::path& asset_folder, const std::filesystem::path& data_folder) {
+bool data_folder_subfolder_allowed() {
+#if defined(HAILSTONE_ALLOW_IN_EQ_FOLDER) && HAILSTONE_ALLOW_IN_EQ_FOLDER
+    return true;
+#else
+    return false;
+#endif
+}
+
+std::string data_folder_conflict(const std::filesystem::path& asset_folder, const std::filesystem::path& data_folder,
+                                 bool allow_subfolder) {
     namespace fs = std::filesystem;
     if (asset_folder.empty() || data_folder.empty()) return {};
     auto normal = [](const fs::path& p) {
@@ -71,14 +80,19 @@ std::string data_folder_conflict(const std::filesystem::path& asset_folder, cons
         if (ec) out = fs::absolute(p, ec).lexically_normal();
         return fs::path(folder_key(out));
     };
-    // Only the installation's own folder is refused. A folder of Hailstone's own inside it (<EverQuest>/hailstone/, as
-    // a server's patcher installs it) is Hailstone's: writing there changes none of the installation's files, and
-    // the client reads game files only from the installation's top folder and its known subfolders.
     fs::path rel = normal(data_folder).lexically_relative(normal(asset_folder));
-    if (rel != ".") return {};
+    if (rel.empty() || *rel.begin() == "..") return {};
+    if (rel == ".")
+        return "Hailstone keeps its own files in " + data_folder.string() +
+               ", this same folder, and would write into the installation, which it only reads. Move Hailstone into "
+               "a folder of its own (or set HAILSTONE_DATA_DIR) and start it again.";
+    // A folder of Hailstone's own inside the installation (<EverQuest>/hailstone/, where a server's patcher may install
+    // it): writing there changes none of the installation's files, and game files are read only from the
+    // installation's top folder and its known subfolders. Allowed only in builds made with HAILSTONE_ALLOW_IN_EQ_FOLDER.
+    if (allow_subfolder) return {};
     return "Hailstone keeps its own files in " + data_folder.string() +
-           ", this same folder, and would write into the installation, which it only reads. Put Hailstone in a "
-           "folder of its own (a subfolder such as hailstone\\ is fine, or set HAILSTONE_DATA_DIR) and start it again.";
+           ", inside this folder, and would write into the installation, which it only reads. Move Hailstone out of "
+           "the EverQuest folder (or set HAILSTONE_DATA_DIR) and start it again.";
 }
 
 bool same_folder(const std::filesystem::path& a, const std::filesystem::path& b) {

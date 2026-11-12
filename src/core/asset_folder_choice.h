@@ -49,10 +49,17 @@ AssetFolderResolution resolve_asset_folder(const std::filesystem::path& override
                                            const AssetFolderValidator& validate = {},
                                            const std::filesystem::path& data_folder = {});
 
+// True in a build made with the CMake option HAILSTONE_ALLOW_IN_EQ_FOLDER (off by default): Hailstone's folder may
+// then be a subfolder of the EverQuest folder (data_folder_conflict).
+bool data_folder_subfolder_allowed();
+
 // Why `asset_folder` cannot be the asset folder when Hailstone writes into `data_folder` (platform::data_dir()):
-// the data folder is that same folder, so Hailstone would write into the installation it must only read. A data
-// folder in a subfolder of it (<EverQuest>/hailstone/) is allowed: "" then, as when they are apart. Both are made absolute and normal first (the disk is asked for links where it can be).
-std::string data_folder_conflict(const std::filesystem::path& asset_folder, const std::filesystem::path& data_folder);
+// the data folder is that folder or inside it, so Hailstone would write into the installation it must only read.
+// "" when they are apart. With `allow_subfolder` a data folder inside it (<EverQuest>/hailstone/, as a server's
+// patcher may install it) is "" too; only the same folder is refused. Both are made absolute and normal first (the
+// disk is asked for links where it can be).
+std::string data_folder_conflict(const std::filesystem::path& asset_folder, const std::filesystem::path& data_folder,
+                                 bool allow_subfolder = data_folder_subfolder_allowed());
 
 // True when two folder names are the same folder as written: compared after lexically_normal() and without a
 // trailing separator, case-insensitively on Windows. The disk is not asked.

@@ -41,7 +41,7 @@ AssetFolderValidator only(const fs::path& good) {
 }
 } // namespace
 
-TEST_CASE("Asset folder: --game-dir / EQ_GAME_DIR first, then assets.path, then the picker") {
+TEST_CASE("Asset folder: a valid --game-dir / EQ_GAME_DIR first, then assets.path, then the picker") {
     TempDir a("a"), b("b");
     Config config;
 
@@ -57,18 +57,36 @@ TEST_CASE("Asset folder: --game-dir / EQ_GAME_DIR first, then assets.path, then 
         CHECK(r.source == AssetFolderSource::Config);
         CHECK(r.path == a.path);
     }
-    SUBCASE("the override wins over assets.path, even when its check fails") {
+    SUBCASE("a valid override wins over assets.path") {
+        config.set("assets.path", b.path.string());
+        auto r = resolve_asset_folder(a.path, config, only(a.path));
+        CHECK(r.source == AssetFolderSource::Override);
+        CHECK(r.path == a.path);
+        CHECK(r.override_ignored.empty());
+    }
+    SUBCASE("an override that fails the check is ignored: assets.path is used") {
         config.set("assets.path", a.path.string());
         auto r = resolve_asset_folder(b.path, config, only(a.path));
-        CHECK(r.source == AssetFolderSource::Override);
-        CHECK(r.path == b.path);
+        CHECK(r.source == AssetFolderSource::Config);
+        CHECK(r.path == a.path);
+        CHECK_FALSE(r.override_ignored.empty());
     }
-    SUBCASE("an override that is no folder goes to the picker, starting on assets.path") {
+    SUBCASE("an override that is no folder is ignored: assets.path is used") {
         config.set("assets.path", a.path.string());
         auto r = resolve_asset_folder(a.path / "nope", config, only(a.path));
-        CHECK(r.source == AssetFolderSource::Picker);
+        CHECK(r.source == AssetFolderSource::Config);
         CHECK(r.path == a.path);
-        CHECK(r.reason.find("--game-dir") != std::string::npos);
+        CHECK(r.override_ignored == "not a folder");
+    }
+    SUBCASE("an ignored override with nothing saved: the picker") {
+        auto r = resolve_asset_folder(b.path, config, only(a.path));
+        CHECK(r.source == AssetFolderSource::Picker);
+        CHECK_FALSE(r.override_ignored.empty());
+    }
+    SUBCASE("an override that holds the data folder is ignored") {
+        auto r = resolve_asset_folder(a.path, config, only(a.path), a.path);
+        CHECK(r.source == AssetFolderSource::Picker);
+        CHECK(r.override_ignored.find("this same folder") != std::string::npos);
     }
     SUBCASE("an assets.path that fails the check: the picker, saying what is missing") {
         config.set("assets.path", b.path.string());
@@ -86,8 +104,8 @@ TEST_CASE("Asset folder: --game-dir / EQ_GAME_DIR first, then assets.path, then 
         CHECK(r.source == AssetFolderSource::Picker);
         CHECK(r.path == a.path);
         CHECK_FALSE(r.reason.empty());
-        // An override still comes first.
-        CHECK(resolve_asset_folder(b.path, config, only(a.path)).source == AssetFolderSource::Override);
+        // A valid override still comes first.
+        CHECK(resolve_asset_folder(a.path, config, only(a.path)).source == AssetFolderSource::Override);
         remember_asset_folder(config, a.path);
         CHECK_FALSE(asset_folder_pick_requested(config));
         CHECK_FALSE(config.get("assets.pick"));
@@ -140,45 +158,128 @@ TEST_CASE("Asset folder: the recent folders") {
     CHECK(config.get_string("assets.path") == (fs::current_path() / "RoF2").string());
 }
 
-TEST_CASE("Asset folder: the EverQuest folder Hailstone sits in is the default when nothing saved works") {
+TEST_CASE("Asset folder: --game-dir is saved like a picker choice and can be changed") {
+    TempDir a("gd_a"), b("gd_b");
+    auto both = [&](const fs::path& p) {
+        AssetFolderCheck c;
+        c.is_directory = true;
+        c.ok = same_folder(p, a.path) || same_folder(p, b.path);
+        return c;
+    };
+    Config config;
+    // Started with --game-dir a: used, and the caller (choose_asset_folder) saves it as the picker would.
+    auto r = resolve_asset_folder(a.path, config, both);
+    REQUIRE(r.source == AssetFolderSource::Override);
+    remember_asset_folder(config, r.path);
+    CHECK(same_folder(config.get_string("assets.path"), fs::absolute(a.path)));
+    REQUIRE_FALSE(recent_asset_folders(config).empty());
+    CHECK(same_folder(recent_asset_folders(config).front(), fs::absolute(a.path)));
+    // The next start without it: the saved folder.
+    CHECK(resolve_asset_folder({}, config, both).source == AssetFolderSource::Config);
+    // "Change Asset Folder" is allowed: the picker shows, and its choice replaces the saved one.
+    request_asset_folder_pick(config, true);
+    CHECK(resolve_asset_folder({}, config, both).source == AssetFolderSource::Picker);
+    remember_asset_folder(config, b.path);
+    auto after = resolve_asset_folder({}, config, both);
+    CHECK(after.source == AssetFolderSource::Config);
+    CHECK(same_folder(after.path, fs::absolute(b.path)));
+    CHECK(recent_asset_folders(config).size() == 2);
+    // An invalid --game-dir later changes nothing saved.
+    auto bad = resolve_asset_folder(a.path / "nope", config, both);
+    CHECK(bad.source == AssetFolderSource::Config);
+    CHECK(same_folder(bad.path, fs::absolute(b.path)));
+}
+
+TEST_CASE("Asset folder: the game folders beside Hailstone's own folder") {
+    TempDir tmp("siblings");
+    const fs::path hs = tmp.path / "hailstone";
+    const fs::path client = tmp.path / "NMS Client";
+    const fs::path junk = tmp.path / "Downloads";
+    fs::create_directories(hs);
+    fs::create_directories(client);
+    fs::create_directories(junk);
+    std::ofstream(tmp.path / "readme.txt") << "x"; // a file, not a folder
+    Config config;
+    // A validator that also passes Hailstone's own folder: it must still never be a candidate.
+    auto pass = [&](std::vector<fs::path> good) {
+        return [good](const fs::path& p) {
+            AssetFolderCheck c;
+            c.is_directory = true;
+            for (const auto& g : good) c.ok = c.ok || same_folder(p, g);
+            return c;
+        };
+    };
+
+    SUBCASE("one: used and marked to be saved") {
+        auto v = pass({client, hs});
+        CHECK(find_sibling_asset_folders(hs, v) == std::vector<fs::path>{client});
+        auto r = resolve_asset_folder({}, config, v, hs / "data", hs);
+        CHECK(r.source == AssetFolderSource::Sibling);
+        CHECK(same_folder(r.path, client));
+        CHECK(r.reason.empty());
+    }
+    SUBCASE("a trailing separator on Hailstone's folder") {
+        auto v = pass({client, hs});
+        CHECK(same_folder(parent_of_own_folder(hs / ""), tmp.path));
+        CHECK(find_sibling_asset_folders(hs / "", v) == std::vector<fs::path>{client});
+        auto r = resolve_asset_folder({}, config, v, {}, hs / "");
+        CHECK(r.source == AssetFolderSource::Sibling);
+        CHECK(same_folder(r.path, client));
+    }
+    SUBCASE("none: the folder Hailstone sits in (the old layout), not saved") {
+        auto v = pass({tmp.path, hs});
+        CHECK(find_sibling_asset_folders(hs, v).empty());
+        auto r = resolve_asset_folder({}, config, v, hs / "data", hs);
+        CHECK(r.source == AssetFolderSource::Found);
+        CHECK(same_folder(r.path, tmp.path));
+    }
+    SUBCASE("none, and the parent is no game folder either: the picker") {
+        auto r = resolve_asset_folder({}, config, pass({hs}), {}, hs);
+        CHECK(r.source == AssetFolderSource::Picker);
+        CHECK(r.candidates.empty());
+    }
+    SUBCASE("several: the picker, with them as candidates") {
+        auto v = pass({client, junk, hs});
+        auto r = resolve_asset_folder({}, config, v, {}, hs);
+        CHECK(r.source == AssetFolderSource::Picker);
+        CHECK(r.candidates == std::vector<fs::path>{junk, client}); // sorted by name
+        CHECK_FALSE(r.reason.empty());
+    }
+    SUBCASE("a saved folder that works wins; assets.pick shows the picker") {
+        auto v = pass({client, junk});
+        config.set("assets.path", junk.string());
+        CHECK(resolve_asset_folder({}, config, v, {}, hs).source == AssetFolderSource::Config);
+        config.set("assets.path", (tmp.path / "moved").string());
+        CHECK(resolve_asset_folder({}, config, pass({client}), {}, hs).source == AssetFolderSource::Sibling);
+        request_asset_folder_pick(config, true);
+        CHECK(resolve_asset_folder({}, config, pass({client}), {}, hs).source == AssetFolderSource::Picker);
+    }
+    SUBCASE("no own folder (a build without HAILSTONE_ALLOW_IN_EQ_FOLDER): the picker") {
+        CHECK(resolve_asset_folder({}, config, pass({client}), {}).source == AssetFolderSource::Picker);
+    }
+    SUBCASE("a valid --game-dir comes before the siblings") {
+        auto r = resolve_asset_folder(junk, config, pass({client, junk}), {}, hs);
+        CHECK(r.source == AssetFolderSource::Override);
+        CHECK(r.path == junk);
+    }
+}
+
+TEST_CASE("Asset folder: the game folder Hailstone sits in (old layout) when nothing saved works") {
     TempDir tmp("beside");
     const fs::path eq = tmp.path / "EverQuest";
     const fs::path hs = eq / "hailstone";
     fs::create_directories(hs);
     Config config;
     // A first start: found, and not saved.
-    auto r = resolve_asset_folder({}, config, only(eq), hs, eq);
+    auto r = resolve_asset_folder({}, config, only(eq), hs, hs);
     CHECK(r.source == AssetFolderSource::Found);
     CHECK(same_folder(r.path, eq));
     CHECK(r.reason.empty());
     CHECK(config.get_string("assets.path", "").empty());
     // Not an installation: the picker, as before.
-    CHECK(resolve_asset_folder({}, config, only(tmp.path / "other"), hs, eq).source == AssetFolderSource::Picker);
-    // No `beside` (a build without HAILSTONE_ALLOW_IN_EQ_FOLDER): the picker.
-    CHECK(resolve_asset_folder({}, config, only(eq), hs).source == AssetFolderSource::Picker);
-    // Hailstone's folder is the EverQuest folder itself: refused even as a default.
-    CHECK(resolve_asset_folder({}, config, only(eq), eq, eq).source == AssetFolderSource::Picker);
-    // A saved folder that works wins; one that is gone falls back to the found one.
-    const fs::path other = tmp.path / "RoF2";
-    fs::create_directories(other);
-    config.set("assets.path", other.string());
-    auto both = [&](const fs::path& p) {
-        AssetFolderCheck c;
-        c.is_directory = true;
-        c.ok = same_folder(p, eq) || same_folder(p, other);
-        return c;
-    };
-    CHECK(resolve_asset_folder({}, config, both, hs, eq).source == AssetFolderSource::Config);
-    config.set("assets.path", (tmp.path / "moved").string());
-    CHECK(resolve_asset_folder({}, config, both, hs, eq).source == AssetFolderSource::Found);
-    // "Change asset folder" asked for the picker: it shows.
-    request_asset_folder_pick(config, true);
-    CHECK(resolve_asset_folder({}, config, both, hs, eq).source == AssetFolderSource::Picker);
-    request_asset_folder_pick(config, false);
-    // An override that is no folder is not replaced by the found one: the picker says why.
-    auto bad = resolve_asset_folder(tmp.path / "nope", config, both, hs, eq);
-    CHECK(bad.source == AssetFolderSource::Picker);
-    CHECK_FALSE(bad.reason.empty());
+    CHECK(resolve_asset_folder({}, config, only(tmp.path / "other"), hs, hs).source == AssetFolderSource::Picker);
+    // Hailstone's data folder is the game folder itself: refused even as a default.
+    CHECK(resolve_asset_folder({}, config, only(eq), eq, hs).source == AssetFolderSource::Picker);
 }
 
 TEST_CASE("Asset folder: never one Hailstone writes into") {

@@ -149,25 +149,26 @@ void ClientApp::apply_video_options() {
 }
 
 bool ClientApp::choose_asset_folder() {
-    // A build for a patcher that installs Hailstone in <EverQuest>/hailstone/ starts on that EverQuest folder when
-    // nothing saved works (HAILSTONE_ALLOW_IN_EQ_FOLDER); others keep asking.
-    // install_dir() ends in a separator (SDL_GetBasePath), so its parent_path() is the folder itself: drop the
-    // empty last part first, else the "EverQuest folder" checked is Hailstone's own.
-    std::filesystem::path beside;
-    if (data_folder_subfolder_allowed()) {
-        std::filesystem::path own = platform::install_dir();
-        if (!own.has_filename()) own = own.parent_path();
-        beside = own.parent_path();
-    }
-    AssetFolderResolution r = resolve_asset_folder(opts_.game_dir, config_, {}, platform::data_dir(), beside);
+    // A build for a launcher that installs Hailstone in <parent>/hailstone/, beside the game folder <parent>/<game>/
+    // (or, the old layout, inside it), looks for that game folder when nothing saved works
+    // (HAILSTONE_ALLOW_IN_EQ_FOLDER); others keep asking. install_dir() ends in a separator (SDL_GetBasePath);
+    // resolve_asset_folder drops it before taking the parent.
+    std::filesystem::path own;
+    if (data_folder_subfolder_allowed()) own = platform::install_dir();
+    AssetFolderResolution r = resolve_asset_folder(opts_.game_dir, config_, {}, platform::data_dir(), own);
+    if (!r.override_ignored.empty())
+        log::warn("asset folder {} (--game-dir / EQ_GAME_DIR) ignored: {}", opts_.game_dir, r.override_ignored);
     std::optional<std::filesystem::path> folder;
     if (r.source != AssetFolderSource::Picker) {
         folder = r.path;
         AssetFolderCheck check = validate_asset_folder(r.path);
         if (!check.ok) log::warn("asset folder {}: {}", r.path.string(), describe(check));
-        // --game-dir / EQ_GAME_DIR is used as asked; the player is told it holds Hailstone's own files.
-        if (std::string why = data_folder_conflict(r.path, platform::data_dir()); !why.empty())
-            log::error("asset folder {}: {}", r.path.string(), why);
+        // --game-dir / EQ_GAME_DIR, or the one game folder beside Hailstone's: saved as if the picker chose it, so
+        // the picker can change it later.
+        if (r.source == AssetFolderSource::Override || r.source == AssetFolderSource::Sibling) {
+            remember_asset_folder(config_, r.path);
+            config_.save(config_path_);
+        }
     } else {
         if (r.reason.empty()) log::info("asset folder: none chosen yet, asking");
         else log::info("asset folder: {} {}", r.reason, r.check.is_directory ? describe(r.check) : "");
@@ -175,6 +176,10 @@ bool ClientApp::choose_asset_folder() {
         view.reason = r.reason;
         view.data_folder = platform::data_dir();
         view.recent = recent_asset_folders(config_);
+        // The game folders found beside Hailstone's own come first.
+        for (auto it = r.candidates.rbegin(); it != r.candidates.rend(); ++it)
+            view.recent = push_recent_folder(std::move(view.recent), it->string(),
+                                             std::max(kMaxRecentAssetFolders, r.candidates.size()));
         if (!r.path.empty()) ui::set_picker_folder(view, r.path.string());
         else if (!view.recent.empty()) ui::set_picker_folder(view, view.recent.front());
         folder = ui::run_asset_picker(window_, vk_, ui_, view, opts_.frames, opts_.screenshot);
@@ -191,16 +196,16 @@ bool ClientApp::choose_asset_folder() {
     }
     asset_source_ = r.source;
     log::info("asset folder {}{}", folder->string(),
-              r.source == AssetFolderSource::Override ? " (--game-dir / EQ_GAME_DIR)"
-              : r.source == AssetFolderSource::Found  ? " (the EverQuest folder Hailstone is in)"
-                                                      : "");
+              r.source == AssetFolderSource::Override ? " (--game-dir / EQ_GAME_DIR, saved)"
+              : r.source == AssetFolderSource::Sibling ? " (the game folder beside Hailstone's folder, saved)"
+              : r.source == AssetFolderSource::Found   ? " (the game folder Hailstone is in)"
+                                                       : "");
     return true;
 }
 
 void ClientApp::change_asset_folder_at_login() {
     // Only on the idle login screen: no login, connection or zone holds what the old folder's files gave them.
-    if (screen_ != Screen::Login || login_ || conn_ || asset_source_ == AssetFolderSource::Override ||
-        !asset_folder_pick_requested(config_))
+    if (screen_ != Screen::Login || login_ || conn_ || !asset_folder_pick_requested(config_))
         return;
     log::info("asset folder: changing it ({} now)", game_.root().string());
     ui::AssetPickerView view;
@@ -250,7 +255,7 @@ bool ClientApp::switch_asset_folder(const std::filesystem::path& folder) {
 void ClientApp::refresh_game_folders() {
     auto& folders = login_view_.game_folders;
     folders.clear();
-    login_view_.game_folder_fixed = asset_source_ == AssetFolderSource::Override;
+    login_view_.game_folder_fixed = false; // a --game-dir / EQ_GAME_DIR folder is saved and can be changed
     if (!game_.has_base()) return;
     folders.push_back({game_.root().string(), is_live_asset_folder(game_), true});
     if (login_view_.game_folder_fixed) return;
@@ -264,7 +269,7 @@ void ClientApp::refresh_game_folders() {
 void ClientApp::apply_classic_folder() {
     std::string folder = opts_.classic_dir.empty() ? config_.get_string("assets.classic", "") : opts_.classic_dir;
     std::optional<std::filesystem::path> classic;
-    if ((asset_source_ != AssetFolderSource::Override || !opts_.classic_dir.empty()) && !folder.empty()) {
+    if (!folder.empty()) {
         if (check_classic_folder(folder).ok) classic = std::filesystem::path(folder);
         else log::warn("classic folder {}: no classic zone files there; not used", folder);
     }
@@ -422,8 +427,7 @@ std::optional<int> ClientApp::option_value(std::string_view o) const {
     if (o.starts_with("gamepad_") && gamepad_)
         if (float scale = gamepad_option_scale(o.substr(8)); scale > 0.0f)
             if (auto v = gamepad_->setting(o.substr(8))) return static_cast<int>(std::lround(*v * scale));
-    // 1: the asset-folder picker shows on the login screen, or at the next start (assets.pick); 1: this start's
-    // folder came from --game-dir or EQ_GAME_DIR, which the picker does not change.
+    // 1: the asset-folder picker shows on the login screen, or at the next start (assets.pick).
     if (o == "asset_folder_pick") return asset_folder_pick_requested(config_) ? 1 : 0;
     // The texture pack: its index in option_choices("texture_pack") (0 off; -1 a folder given by path, or a missing
     // one). Hailstone Texture Studio (projecthailstone/hailstone-texstudio, the tool add-on "texstudio",
@@ -432,7 +436,8 @@ std::optional<int> ClientApp::option_value(std::string_view o) const {
         return assets::texture_pack_choice(config_.get_string("display.texture_folder", ""),
                                            assets::texture_pack_names(platform::textures_dir()));
     if (o == "texture_studio") return texture_studio_installed() ? 1 : 0;
-    if (o == "asset_folder_override") return asset_source_ == AssetFolderSource::Override ? 1 : 0;
+    // Always 0: a --game-dir / EQ_GAME_DIR folder is saved, and the picker changes it like any other.
+    if (o == "asset_folder_override") return 0;
     audio::AudioSettings s = audio_ ? audio_->settings() : audio::load_audio_settings(config_);
     if (o == "master") return s.master;
     if (o == "music") return s.music;

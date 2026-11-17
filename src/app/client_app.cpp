@@ -749,7 +749,7 @@ int run_client(ClientOptions& options) {
     int code = 0;
     client_internal::ClientApp::UpdateExit update;
     {
-        // Without --game-dir or EQ_GAME_DIR the asset folder comes from hailstone.ini or the picker
+        // The asset folder comes from --game-dir / EQ_GAME_DIR (then saved), hailstone.ini or the picker
         // (choose_asset_folder). On the heap: a Windows crash dump holds the threads' stacks, and the client's
         // members (the login fields, the session key) must not be in it.
         auto app = std::make_unique<client_internal::ClientApp>(options);

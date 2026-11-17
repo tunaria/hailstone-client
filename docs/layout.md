@@ -152,17 +152,20 @@ has no `assets.path` that passes the check, or when `assets.pick=1` asks for it 
 tab, "Change Asset Folder"). It has a folder field, a "Choose folder..." button (the system's folder dialog,
 `SDL_ShowOpenFolderDialog`) and the folders used before (`assets.recent`, newest first, at most 8). Continue is
 enabled only when the check passes, and the choice is saved as `assets.path`. `--game-dir DIR` or `EQ_GAME_DIR`
-override all of this and skip the picker (`core/asset_folder_choice.h`). The zone and model viewers have no picker:
+come first: a folder given there that passes the check is saved as `assets.path` (and put first in `assets.recent`)
+as if the picker chose it, so the picker can change it later; one that does not pass is logged and ignored
+(`core/asset_folder_choice.h`). In a build with `HAILSTONE_ALLOW_IN_EQ_FOLDER`, when nothing saved works, the client
+looks beside its own folder (a launcher installs it as `<parent>/hailstone/` next to `<parent>/<game folder>/`): one
+game folder there is used and saved; several open the picker with them listed first; none falls back to the folder
+Hailstone sits in (the older `<game folder>/hailstone/` layout), used but not saved. The zone and model viewers have no picker:
 they use `--game-dir`, `EQ_GAME_DIR` or the saved `assets.path`. "Change Asset Folder" in the game shows the picker
 when the player is back on the login screen (camped out), or at once when the Options window is used there; its
 Cancel keeps the folder. The login screen's Game files row does the same without the Options window: a list of the
 folder in use and `assets.recent`'s, each marked RoF2, Live or Not usable (checked when the list is made), where
-picking one switches to it at once (`ClientApp::switch_asset_folder`), and Browse... opens the picker. With
-`--game-dir` or `EQ_GAME_DIR` the row only shows the folder. The server's own files have their row below it,
+picking one switches to it at once (`ClientApp::switch_asset_folder`), and Browse... opens the picker. The server's own files have their row below it,
 Server files. The new folder is used at once: the game files read before the login are read again, as
 for a server's `assets/` (`ClientApp::reload_server_files`), and nothing else holds the old folder's files there
-(no connection, no zone). Closing the window in the picker keeps the request for the next start. With `--game-dir` or
-`EQ_GAME_DIR` the picker does not show. The folder is saved absolute, so a typed relative one means the same folder from any
+(no connection, no zone). Closing the window in the picker keeps the request for the next start. The folder is saved absolute, so a typed relative one means the same folder from any
 start directory. A folder that holds the data folder (Hailstone placed inside the RoF2 install, below its own
 folder) is refused, since Hailstone would write into it.
 

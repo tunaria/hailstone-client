@@ -354,7 +354,8 @@ public:
         config_.load(config_path_);
         if (opts_.clip_plane != 15) clip_plane_arg_ = opts_.clip_plane;
         if (opts_.max_fps > 0) max_fps_arg_ = opts_.max_fps;
-        // The asset folder: --game-dir or EQ_GAME_DIR, else hailstone.ini assets.path, else the picker asks.
+        // The asset folder: --game-dir or EQ_GAME_DIR (then saved), else hailstone.ini assets.path, else the game
+        // folder beside Hailstone's, else the picker asks.
         if (!choose_asset_folder()) {
             quit_ = true;
             return;
@@ -876,8 +877,7 @@ private:
     // known; false when the player quit it (app/client_app_options.cpp).
     bool choose_asset_folder();
     // The Options window's "Change Asset Folder" (assets.pick) once the login screen is idle: the picker again, its
-    // folder made game_'s base and the game files read again (reload_server_files); Cancel keeps the folder. Not
-    // with --game-dir or EQ_GAME_DIR, which the picker does not change.
+    // folder made game_'s base and the game files read again (reload_server_files); Cancel keeps the folder.
     void change_asset_folder_at_login();
     // Makes `folder` the asset folder while the login screen is idle: remembered as assets.path once the game runs
     // with it, and the game files read before the login read again. False when it cannot be used (logged).
@@ -886,7 +886,7 @@ private:
     // gone).
     void refresh_game_folders();
     // hailstone.ini assets.classic as game_'s classic folder (GameDir::set_classic): with a live base its copies of
-    // the zones live changed come first (classic_preferred_file). Not with --game-dir / EQ_GAME_DIR.
+    // the zones live changed come first (classic_preferred_file).
     void apply_classic_folder();
     // The screenshot key (the key map's SCREENCAP, or Print Screen while no other command has it) and /screenshot:
     // the next frame goes to a new screenshots/hailstone-<date>-<time>.png (platform::new_screenshot_path).

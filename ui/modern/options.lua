@@ -530,9 +530,7 @@ local function displayTab()
         if ui.Button("Keep This Folder", 0, 0) then eq.SetOption("asset_folder_pick", 0) end
       end
       if pick ~= 0 then
-        note(eq.Option("asset_folder_override") == 1
-          and "Started with --game-dir or EQ_GAME_DIR: that folder is used while it is given."
-          or "The folder picker shows on the login screen: camp out to choose another asset folder.")
+        note("The folder picker shows on the login screen: camp out to choose another asset folder.")
       end
     end)
   end

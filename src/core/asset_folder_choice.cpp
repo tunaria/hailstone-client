@@ -23,48 +23,94 @@ std::string folder_key(const std::filesystem::path& p) {
 }
 } // namespace
 
-// The override, then assets.path (resolve_asset_folder without `beside`).
-static AssetFolderResolution resolve_saved_asset_folder(const std::filesystem::path& override_dir, const Config& config,
-                                                        const AssetFolderValidator& check,
+// assets.path alone (resolve_asset_folder without the override and `own_folder`).
+static AssetFolderResolution resolve_saved_asset_folder(const Config& config, const AssetFolderValidator& check,
                                                         const std::filesystem::path& data_folder);
+
+std::filesystem::path parent_of_own_folder(const std::filesystem::path& own_folder) {
+    std::filesystem::path own = own_folder;
+    if (!own.has_filename() && own.has_relative_path()) own = own.parent_path(); // "/games/hailstone/"
+    return own.parent_path();
+}
+
+std::vector<std::filesystem::path> find_sibling_asset_folders(const std::filesystem::path& own_folder,
+                                                              const AssetFolderValidator& validate,
+                                                              const std::filesystem::path& data_folder) {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> out;
+    const fs::path parent = parent_of_own_folder(own_folder);
+    if (parent.empty()) return out;
+    std::error_code ec;
+    fs::directory_iterator it(parent, ec), end;
+    for (; !ec && it != end; it.increment(ec)) {
+        std::error_code dir_ec;
+        if (!it->is_directory(dir_ec)) continue;
+        const fs::path p = it->path();
+        if (same_folder(p, own_folder)) continue;
+        if (!(validate ? validate(p) : validate_asset_folder(p)).ok) continue;
+        if (!data_folder.empty() && !data_folder_conflict(p, data_folder, true).empty()) continue;
+        out.push_back(p);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
 
 AssetFolderResolution resolve_asset_folder(const std::filesystem::path& override_dir, const Config& config,
                                            const AssetFolderValidator& validate,
                                            const std::filesystem::path& data_folder,
-                                           const std::filesystem::path& beside) {
+                                           const std::filesystem::path& own_folder) {
     auto check = [&](const std::filesystem::path& p) { return validate ? validate(p) : validate_asset_folder(p); };
-    AssetFolderResolution out = resolve_saved_asset_folder(override_dir, config, check, data_folder);
-    // Nothing saved works (a first start, or a moved folder): the installation Hailstone sits in, when it is one.
-    if (out.source == AssetFolderSource::Picker && !beside.empty() && !asset_folder_pick_requested(config) &&
-        (override_dir.empty() || out.reason.empty())) {
-        std::error_code ec;
-        if (std::filesystem::is_directory(beside, ec) && check(beside).ok &&
-            (data_folder.empty() || data_folder_conflict(beside, data_folder, true).empty())) {
-            out.source = AssetFolderSource::Found;
-            out.path = beside;
-            out.reason.clear();
-            out.check = {};
-        }
-    }
-    return out;
-}
-
-static AssetFolderResolution resolve_saved_asset_folder(const std::filesystem::path& override_dir, const Config& config,
-                                                        const AssetFolderValidator& check,
-                                                        const std::filesystem::path& data_folder) {
-    AssetFolderResolution out;
-    std::filesystem::path saved = config.get_string("assets.path", "");
+    std::string ignored;
     if (!override_dir.empty()) {
         std::error_code ec;
-        if (std::filesystem::is_directory(override_dir, ec)) {
+        if (!std::filesystem::is_directory(override_dir, ec)) {
+            ignored = "not a folder";
+        } else if (!check(override_dir).ok) {
+            ignored = "not a complete EverQuest installation (RoF2 or live)";
+        } else if (std::string why = data_folder.empty() ? std::string() : data_folder_conflict(override_dir, data_folder);
+                   !why.empty()) {
+            ignored = why;
+        } else {
+            AssetFolderResolution out;
             out.source = AssetFolderSource::Override;
             out.path = override_dir;
             return out;
         }
-        out.path = saved;
-        out.reason = "The folder given with --game-dir or EQ_GAME_DIR is not a folder: " + override_dir.string();
+    }
+    AssetFolderResolution out = resolve_saved_asset_folder(config, check, data_folder);
+    out.override_ignored = std::move(ignored);
+    if (out.source != AssetFolderSource::Picker || own_folder.empty() || asset_folder_pick_requested(config)) return out;
+    // Nothing saved works (a first start, or a moved folder): the game folder beside Hailstone's own folder.
+    std::vector<std::filesystem::path> siblings = find_sibling_asset_folders(own_folder, check, data_folder);
+    if (siblings.size() == 1) {
+        out.source = AssetFolderSource::Sibling;
+        out.path = siblings.front();
+        out.reason.clear();
+        out.check = {};
         return out;
     }
+    if (siblings.size() > 1) {
+        out.candidates = std::move(siblings);
+        if (out.reason.empty()) out.reason = "More than one game folder is next to Hailstone's folder: choose one.";
+        return out;
+    }
+    // None: the old layout, Hailstone inside the game folder.
+    const std::filesystem::path parent = parent_of_own_folder(own_folder);
+    std::error_code ec;
+    if (!parent.empty() && std::filesystem::is_directory(parent, ec) && check(parent).ok &&
+        (data_folder.empty() || data_folder_conflict(parent, data_folder, true).empty())) {
+        out.source = AssetFolderSource::Found;
+        out.path = parent;
+        out.reason.clear();
+        out.check = {};
+    }
+    return out;
+}
+
+static AssetFolderResolution resolve_saved_asset_folder(const Config& config, const AssetFolderValidator& check,
+                                                        const std::filesystem::path& data_folder) {
+    AssetFolderResolution out;
+    std::filesystem::path saved = config.get_string("assets.path", "");
     out.path = saved;
     if (saved.empty()) return out;
     if (asset_folder_pick_requested(config)) {

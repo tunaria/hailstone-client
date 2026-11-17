@@ -202,7 +202,7 @@ void ClientApp::login_action(ui::LoginAction action) {
         break;
     case ui::LoginAction::UseGameFolder: {
         // Only while nothing holds the old folder's files (the login screen is idle, as for the picker).
-        if (login_ || conn_ || asset_source_ == AssetFolderSource::Override) break;
+        if (login_ || conn_) break;
         std::filesystem::path folder(login_view_.game_choice);
         AssetFolderCheck check = validate_asset_folder(folder);
         if (!check.ok) {

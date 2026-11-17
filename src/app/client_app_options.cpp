@@ -157,14 +157,14 @@ bool ClientApp::choose_asset_folder() {
     if (data_folder_subfolder_allowed()) own = platform::install_dir();
     AssetFolderResolution r = resolve_asset_folder(opts_.game_dir, config_, {}, platform::data_dir(), own);
     if (!r.override_ignored.empty())
-        log::warn("asset folder {} (--game-dir / EQ_GAME_DIR) ignored: {}", opts_.game_dir, r.override_ignored);
+        log::info("--game-dir {} not used: {}", opts_.game_dir, r.override_ignored);
     std::optional<std::filesystem::path> folder;
     if (r.source != AssetFolderSource::Picker) {
         folder = r.path;
         AssetFolderCheck check = validate_asset_folder(r.path);
         if (!check.ok) log::warn("asset folder {}: {}", r.path.string(), describe(check));
-        // --game-dir / EQ_GAME_DIR, or the one game folder beside Hailstone's: saved as if the picker chose it, so
-        // the picker can change it later.
+        // --game-dir / EQ_GAME_DIR (no working assets.path), or the one game folder beside Hailstone's: saved as
+        // assets.path, the one setting the picker changes too.
         if (r.source == AssetFolderSource::Override || r.source == AssetFolderSource::Sibling) {
             remember_asset_folder(config_, r.path);
             config_.save(config_path_);

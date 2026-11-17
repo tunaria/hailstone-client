@@ -152,8 +152,9 @@ has no `assets.path` that passes the check, or when `assets.pick=1` asks for it 
 tab, "Change Asset Folder"). It has a folder field, a "Choose folder..." button (the system's folder dialog,
 `SDL_ShowOpenFolderDialog`) and the folders used before (`assets.recent`, newest first, at most 8). Continue is
 enabled only when the check passes, and the choice is saved as `assets.path`. `--game-dir DIR` or `EQ_GAME_DIR`
-come first: a folder given there that passes the check is saved as `assets.path` (and put first in `assets.recent`)
-as if the picker chose it, so the picker can change it later; one that does not pass is logged and ignored
+are only the default: when `assets.path` is empty or no longer passes the check, a folder given there that passes
+it is saved as `assets.path` (and put first in `assets.recent`). A working `assets.path` wins over them, so a folder
+chosen in the picker or the Game files row stays across starts; an override not used is logged
 (`core/asset_folder_choice.h`). In a build with `HAILSTONE_ALLOW_IN_EQ_FOLDER`, when nothing saved works, the client
 looks beside its own folder (a launcher installs it as `<parent>/hailstone/` next to `<parent>/<game folder>/`): one
 game folder there is used and saved; several open the picker with them listed first; none falls back to the folder

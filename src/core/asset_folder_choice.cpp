@@ -60,25 +60,29 @@ AssetFolderResolution resolve_asset_folder(const std::filesystem::path& override
                                            const std::filesystem::path& data_folder,
                                            const std::filesystem::path& own_folder) {
     auto check = [&](const std::filesystem::path& p) { return validate ? validate(p) : validate_asset_folder(p); };
-    std::string ignored;
+    // One setting, assets.path: a saved folder that works (or a requested pick) comes first, and the override is
+    // only the default that fills an empty or broken one.
+    AssetFolderResolution out = resolve_saved_asset_folder(config, check, data_folder);
     if (!override_dir.empty()) {
         std::error_code ec;
-        if (!std::filesystem::is_directory(override_dir, ec)) {
-            ignored = "not a folder";
+        if (out.source == AssetFolderSource::Config) {
+            out.override_ignored = "assets.path " + out.path.string() + " is saved";
+        } else if (asset_folder_pick_requested(config)) {
+            out.override_ignored = "the asset folder picker was asked for";
+        } else if (!std::filesystem::is_directory(override_dir, ec)) {
+            out.override_ignored = "not a folder";
         } else if (!check(override_dir).ok) {
-            ignored = "not a complete EverQuest installation (RoF2 or live)";
+            out.override_ignored = "not a complete EverQuest installation (RoF2 or live)";
         } else if (std::string why = data_folder.empty() ? std::string() : data_folder_conflict(override_dir, data_folder);
                    !why.empty()) {
-            ignored = why;
+            out.override_ignored = why;
         } else {
-            AssetFolderResolution out;
-            out.source = AssetFolderSource::Override;
-            out.path = override_dir;
-            return out;
+            AssetFolderResolution used;
+            used.source = AssetFolderSource::Override;
+            used.path = override_dir;
+            return used;
         }
     }
-    AssetFolderResolution out = resolve_saved_asset_folder(config, check, data_folder);
-    out.override_ignored = std::move(ignored);
     if (out.source != AssetFolderSource::Picker || own_folder.empty() || asset_folder_pick_requested(config)) return out;
     // Nothing saved works (a first start, or a moved folder): the game folder beside Hailstone's own folder.
     std::vector<std::filesystem::path> siblings = find_sibling_asset_folders(own_folder, check, data_folder);

@@ -5,8 +5,8 @@
 //   assets.recent  the folders chosen, most recent first, '|'-separated (at most kMaxRecentAssetFolders)
 //   assets.pick    1: show the picker on the idle login screen, or at the next start, even when assets.path is
 //                  fine (the Options window's "Change asset folder")
-// --game-dir and EQ_GAME_DIR come first: a valid one is saved as assets.path (the caller saves it), so the picker can
-// change it later like any saved folder.
+// --game-dir and EQ_GAME_DIR are only the default: a valid one fills an empty or broken assets.path (the caller saves
+// it); a working assets.path, which the picker sets, wins over them.
 
 #include <cstddef>
 #include <filesystem>
@@ -24,7 +24,7 @@ class Config;
 inline constexpr std::size_t kMaxRecentAssetFolders = 8;
 
 enum class AssetFolderSource {
-    Override, // --game-dir or EQ_GAME_DIR, valid; the caller saves it as assets.path
+    Override, // --game-dir or EQ_GAME_DIR, valid, with no working assets.path; the caller saves it as assets.path
     Config,   // hailstone.ini assets.path
     Found,    // the game folder Hailstone's own folder sits in (the old <game>/hailstone layout); not saved
     Sibling,  // the one game folder beside Hailstone's own folder (<parent>/hailstone next to <parent>/<game>); saved
@@ -48,9 +48,11 @@ struct AssetFolderResolution {
 // Checks a folder; validate_asset_folder() unless a test passes its own.
 using AssetFolderValidator = std::function<AssetFolderCheck(const std::filesystem::path&)>;
 
-// The order: the override (`override_dir`, from --game-dir or EQ_GAME_DIR) when it passes the check and does not
-// hold `data_folder`; one that does not is ignored (override_ignored says why). Then assets.path when it passes the
-// check, no assets.pick is set and it does not hold `data_folder` (data_folder_conflict; an empty one is not checked).
+// The order: assets.path when it passes the check, no assets.pick is set and it does not hold `data_folder`
+// (data_folder_conflict; an empty one is not checked); with assets.pick set, the picker. Else the override
+// (`override_dir`, from --game-dir or EQ_GAME_DIR) when it passes the check and does not hold `data_folder`: it is
+// only the default for an empty or broken assets.path (the caller saves it there). An override not used says why in
+// override_ignored.
 // Then, when `own_folder` (Hailstone's own folder; passed only in a HAILSTONE_ALLOW_IN_EQ_FOLDER build) is given and
 // no assets.pick is set: find_sibling_asset_folders() of it. Exactly one: Sibling. Several: the picker with them as
 // candidates. None: the parent of `own_folder` (the old <game>/hailstone layout) as Found when it passes the check and

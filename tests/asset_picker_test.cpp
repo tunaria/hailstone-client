@@ -94,7 +94,8 @@ TEST_CASE("Asset folder: assets.path first, then a valid --game-dir / EQ_GAME_DI
         auto r = resolve_asset_folder(a.path / "nope", config, only(a.path));
         CHECK(r.source == AssetFolderSource::Config);
         CHECK(r.path == a.path);
-        CHECK(r.override_ignored == "not a folder");
+        CHECK(r.override_ignored.find("is saved") != std::string::npos); // a working assets.path wins first
+        CHECK(resolve_asset_folder(a.path / "nope", Config{}, only(a.path)).override_ignored == "not a folder");
     }
     SUBCASE("an ignored override with nothing saved: the picker") {
         auto r = resolve_asset_folder(b.path, config, only(a.path));
